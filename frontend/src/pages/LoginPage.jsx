@@ -33,14 +33,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [gisStatus, setGisStatus] = useState("loading"); // loading, ready, error
 
   // Use CLIENT_ID placeholder as requested
   const GOOGLE_CLIENT_ID = "247709129581-71f9rdp47vur1ggd3ugr4432oic7dik9.apps.googleusercontent.com";
 
   useEffect(() => {
-    // Prevent multiple script insertions
-    if (document.getElementById("google-gsi-script")) {
-      initGoogle();
+    // Check if script is already present
+    const existingScript = document.getElementById("google-gsi-script");
+    if (existingScript) {
+      if (window.google) {
+        initGoogle();
+      } else {
+        existingScript.onload = initGoogle;
+      }
       return;
     }
 
@@ -49,18 +55,16 @@ export default function LoginPage() {
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
     script.defer = true;
-    document.body.appendChild(script);
-
-    script.onload = initGoogle;
-
-    return () => {
-      // We don't necessarily want to remove the script on unmount
-      // as it might be needed if the user comes back.
+    script.onerror = () => {
+      setGisStatus("error");
+      console.error("Failed to load Google Identity Services script.");
     };
+    script.onload = initGoogle;
+    document.body.appendChild(script);
   }, []);
 
   const initGoogle = () => {
-    if (window.google && !window.gsiInitialized) {
+    if (window.google) {
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: handleGoogleResponse,
@@ -68,7 +72,9 @@ export default function LoginPage() {
         itp_support: true,
         ux_mode: "popup" 
       });
-      window.gsiInitialized = true;
+      setGisStatus("ready");
+    } else {
+      setGisStatus("error");
     }
   };
 
@@ -95,23 +101,26 @@ export default function LoginPage() {
   };
 
   const onGoogleBtnClick = () => {
-    if (window.google) {
+    if (gisStatus === "ready" && window.google) {
       setError("");
-      // Using prompt with a callback to detect suppression
       window.google.accounts.id.prompt((notification) => {
         if (notification.isNotDisplayed()) {
-          console.warn("Google Prompt not displayed:", notification.getNotDisplayedReason());
-          setError("Google sign-in is currently unavailable or suppressed by the browser. Please try again or check your account settings.");
-        }
-        if (notification.isSkippedMoment()) {
-          console.warn("Google Prompt skipped:", notification.getSkippedReason());
-        }
-        if (notification.isDismissedMoment()) {
-          console.warn("Google Prompt dismissed:", notification.getDismissedReason());
+          const reason = notification.getNotDisplayedReason();
+          console.warn("Google Prompt not displayed:", reason);
+          
+          let userMessage = "Google sign-in is currently unavailable or suppressed by the browser.";
+          if (reason === "request_denied") userMessage = "Google Sign-in denied. This usually means the current website URL is not authorized in the Google Cloud Console.";
+          if (reason === "unregistered_origin") userMessage = "Origin not authorized. Please add your local URL (e.g., http://localhost:5173) to 'Authorized JavaScript origins' in the Google Cloud Console.";
+          if (reason === "suppressed_by_user") userMessage = "Google Sign-in was dismissed. Please reload the page or clear cookies to try again.";
+          if (reason === "opt_out_or_no_session") userMessage = "No Google session found. Please ensure you are logged into Google.";
+          
+          setError(`${userMessage} (Reason: ${reason})`);
         }
       });
+    } else if (gisStatus === "loading") {
+      setError("Google Login is still initializing. Please wait a moment.");
     } else {
-      setError("Google Login is still loading. Please wait a moment.");
+      setError("Google Sign-in service failed to load. Please check your internet or browser settings.");
     }
   };
 
@@ -122,9 +131,20 @@ export default function LoginPage() {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Firebase success logic redirect handles profile fetch via /api/auth/me naturally
-      navigate(role === "manager" ? "/dashboard" : "/tasks");
+      const idToken = await userCredential.user.getIdToken();
+      
+      // Fetch the actual authoritative role from the backend
+      const res = await axios.get(`${API_BASE}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+
+      const actualRole = res.data.user.role;
+      localStorage.setItem("user", JSON.stringify(res.data.user)); // Cache for UI
+
+      // Authoritative redirect based on database role
+      navigate(actualRole === "manager" ? "/dashboard" : "/tasks");
     } catch (err) {
+      console.error("Login verification failed:", err);
       setError("Invalid email or password.");
     } finally {
       setLoading(false);

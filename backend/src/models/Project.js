@@ -95,6 +95,26 @@ const ProjectSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    // Detailed breakdown of tasks per employee
+    taskAllotment: [
+      {
+        employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        subTasks: [
+          {
+            title: String,
+            description: String,
+            deadline: Date,
+            priority: { type: String, enum: ["high", "medium", "low"], default: "medium" }
+          }
+        ],
+        rationale: String
+      }
+    ],
+    // Gatekeeper for sending emails
+    tasksCommitted: {
+      type: Boolean,
+      default: false
+    }
   },
   {
     // Automatically adds createdAt and updatedAt

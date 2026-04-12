@@ -163,7 +163,9 @@ const createProject = async (req, res) => {
       project.crewData = crewData;
       await project.save();
     } catch (err) {
-      console.error("Immediate AI Crew Generation failed:", err.message);
+      console.error("CRITICAL: Immediate AI Crew Generation failed for project:", project._id);
+      console.error("Error Detail:", err.message);
+      if (err.response) console.error("AI Provider Response:", JSON.stringify(err.response.data));
     }
 
     return res.status(201).json({

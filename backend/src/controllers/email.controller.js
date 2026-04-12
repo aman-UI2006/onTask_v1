@@ -40,25 +40,35 @@ function formatDateOrDash(date) {
 function buildProjectEmailHtml({ project, employee, tasks, accessCode }) {
   const projectDeadline = formatDateOrDash(project.deadline);
 
-  const tasksHtml =
-    tasks.length === 0
-      ? `<p style="margin:0;color:#444;">No tasks are assigned to you yet for this project.</p>`
-      : `<ul style="margin:8px 0 0;padding-left:18px;">
-          ${tasks
-            .map((t) => {
-              const taskDeadline = formatDateOrDash(t.deadline);
-              return `
-                <li style="margin:10px 0;">
-                  <div style="font-weight:600;color:#111;">${t.title}</div>
-                  <div style="color:#444;margin-top:2px;">${t.description}</div>
-                  <div style="color:#666;font-size:12px;margin-top:4px;">
-                    Priority: ${t.priority || "—"} • Est: ${t.estimatedDays || 1} day(s) • Deadline: ${taskDeadline}
-                  </div>
-                </li>
-              `;
-            })
-            .join("")}
-        </ul>`;
+  // Find structured tasks from the project's taskAllotment if available
+  const allotment = project.taskAllotment?.find(a => String(a.employeeId) === String(employee._id));
+  const subTasks = allotment?.subTasks || [];
+
+  const tasksHtml = (subTasks.length === 0 && tasks.length === 0)
+    ? `<p style="margin:0;color:#444;">No specific operational milestones have been authorized for your unit yet.</p>`
+    : `<ul style="margin:8px 0 0;padding-left:18px;">
+        ${subTasks.map((t, i) => `
+          <li style="margin:10px 0; border-left: 2px solid #6366f1; padding-left: 12px;">
+            <div style="font-weight:700;color:#111;">${i + 1}. ${t.title}</div>
+            <div style="color:#444;margin-top:2px;font-size:14px;">${t.description}</div>
+            <div style="color:#6366f1;font-size:11px;font-weight:800;margin-top:4px;text-transform:uppercase;">
+              PRIORITY: ${t.priority} • DEADLINE: ${formatDateOrDash(t.deadline)}
+            </div>
+          </li>
+        `).join("")}
+        ${tasks.map(t => {
+          const taskDeadline = formatDateOrDash(t.deadline);
+          return `
+            <li style="margin:10px 0;">
+              <div style="font-weight:600;color:#111;">${t.title}</div>
+              <div style="color:#444;margin-top:2px;">${t.description}</div>
+              <div style="color:#666;font-size:12px;margin-top:4px;">
+                Priority: ${t.priority || "—"} • Deadline: ${taskDeadline}
+              </div>
+            </li>
+          `;
+        }).join("")}
+      </ul>`;
 
   return `
     <div style="font-family:Arial,sans-serif;background:#f6f7fb;padding:24px;">

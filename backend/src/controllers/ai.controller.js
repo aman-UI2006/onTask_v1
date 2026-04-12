@@ -496,6 +496,75 @@ const getEmployees = async (req, res) => {
   }
 };
 
+// ─── ALLOCATE DETAILED TASKS ──────────────────────────────────
+// POST /api/ai/allocate-tasks
+const allocateTasks = async (req, res) => {
+  try {
+    const { projectId } = req.body;
+    const project = await Project.findById(projectId).populate("assignedEmployees", "name skills department bio");
+
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    console.info(`[AI] Starting Task Allocation for Project: ${project.title} (${project._id})`);
+    console.info(`[AI] Context: Assigned Employees = ${project.assignedEmployees.length}`);
+
+    // Prepare context for the AI
+    const context = {
+      title: project.title,
+      description: project.description,
+      teams: project.crewData, // Contains team structures
+      employees: project.assignedEmployees.map(e => ({
+        id: e._id,
+        name: e.name,
+        skills: e.skills,
+        department: e.department,
+        bio: e.bio
+      })),
+      projectDeadline: project.deadline
+    };
+
+    // Call Grok/AI service to get structured allotment
+    const allotment = await grokService.allocateStructuredTasks(context);
+
+    // Update project with suggestions (but don't commit yet)
+    project.taskAllotment = allotment;
+    project.tasksCommitted = false;
+    await project.save();
+
+    console.log(`[AI] Successfully allocated sub-tasks for ${allotment.length} personnel units.`);
+    return res.status(200).json({ allotment, message: "Sub-tasks allocated successfully." });
+  } catch (error) {
+    console.error("Task allocation error:", error.message);
+    const errorMsg = error.message.includes("Unexpected token") 
+      ? "AI model returned an unparseable roadmap. Try simplifying the project description."
+      : error.message;
+    return res.status(500).json({ message: errorMsg });
+  }
+};
+
+// POST /api/ai/commit-tasks
+const commitTasks = async (req, res) => {
+  try {
+    const { projectId, taskAllotment } = req.body;
+    const project = await Project.findById(projectId);
+
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    // Update with final manager refinements if provided
+    if (taskAllotment) {
+      project.taskAllotment = taskAllotment;
+    }
+    
+    project.tasksCommitted = true;
+    await project.save();
+
+    return res.status(200).json({ project, message: "Operational roadmap committed and frozen." });
+  } catch (error) {
+    console.error("Commit tasks error:", error.message);
+    return res.status(500).json({ message: "Failed to commit tasks", error: error.message });
+  }
+};
+
 module.exports = {
   selectEmployees,
   generateWorkflow,
@@ -506,4 +575,6 @@ module.exports = {
   formTeams,
   generateEnhancedEmail,
   getEmployees,
+  allocateTasks,
+  commitTasks,
 };

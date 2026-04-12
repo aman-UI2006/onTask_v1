@@ -170,3 +170,15 @@ export async function fetchEmployees() {
   const res = await axios.get(`${BASE}/api/auth/employees`, { headers });
   return res.data.employees || [];
 }
+
+export async function aiAllocateTasks(projectId) {
+  const headers = await authHeader();
+  const res = await axios.post(`${BASE}/api/ai/allocate-tasks`, { projectId }, { headers });
+  return res.data.allotment;
+}
+
+export async function commitTasks(projectId, taskAllotment) {
+  const headers = await authHeader();
+  const res = await axios.post(`${BASE}/api/ai/commit-tasks`, { projectId, taskAllotment }, { headers });
+  return res.data.project;
+}

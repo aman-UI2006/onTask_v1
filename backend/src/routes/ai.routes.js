@@ -16,6 +16,8 @@ const {
   formTeams,
   generateEnhancedEmail,
   getEmployees,
+  allocateTasks,
+  commitTasks,
 } = require("../controllers/ai.controller");
 
 // POST /api/ai/select-employees
@@ -53,5 +55,11 @@ router.post("/generate-enhanced-email", verifyToken, roleCheck("manager"), gener
 // GET /api/ai/employees
 // Get all employees for selection/management
 router.get("/employees", verifyToken, roleCheck("manager"), getEmployees);
+
+// POST /api/ai/allocate-tasks
+router.post("/allocate-tasks", verifyToken, roleCheck("manager"), allocateTasks);
+
+// POST /api/ai/commit-tasks
+router.post("/commit-tasks", verifyToken, roleCheck("manager"), commitTasks);
 
 module.exports = router;

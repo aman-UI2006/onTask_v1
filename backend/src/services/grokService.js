@@ -254,15 +254,20 @@ Analyze the requirements and available talent. Evaluate each employee based on:
 3. Relevant Past Projects worked.
 4. Professional Bio/Summary.
 
-Group the MOST APPROPRIATE employees into specialized teams (e.g., "Web Development Team", "Research & Design Team").
-Only use employees provided in the list.
+Group the MOST APPROPRIATE employees into specialized teams (e.g., "Web Development Team", "Research & Design Team"). 
+
+IMPORTANT CONSTRAINTS:
+1. TALENT DISTRIBUTION: Ideally, each employee should be assigned to ONLY ONE specialized team.
+2. AVOID BOTTLENECKS: Do not over-allocate a single high-performing individual to multiple teams unless their specific skill is a critical bottleneck that no other candidate possesses.
+3. CAPACITY: Aim for a distributed crew structure where responsibility is shared across the available talent pool.
+4. Only use employees provided in the list.
 
 Respond ONLY with this exact JSON format:
 {
   "teams": {
     "Team Name": ["employee_id1", "employee_id2"]
   },
-  "rationale": "One specific sentence explaining the selection criteria."
+  "rationale": "One specific sentence explaining the selection criteria and how talent was distributed."
 }
 
 IMPORTANT: Provide the actual employee IDs (A-Z0-9) as the array values, not their names.
@@ -293,6 +298,78 @@ Tone Guidelines:
 Respond ONLY with the email body text. Do NOT include subject lines, preamble, or sign-offs like "Best regards". Just the core message body.
 `;
   return await callGrokFreeform(prompt);
+};
+
+// ─── ALLOCATE STRUCTURED TASKS ──────────────────────────────
+// Decomposes project into multiple sub-tasks per operative.
+const allocateStructuredTasks = async (context) => {
+  const { title, description, teams, employees, projectDeadline } = context;
+
+  const employeeBioList = employees.map(e => (
+    `- ID: ${e.id}, Name: ${e.name}, Skills: ${e.skills.join(", ")}, Bio: ${e.bio || "No data"}`
+  )).join("\n");
+
+  const teamContext = teams && Object.keys(teams).length > 0 
+    ? `Team Allotment Context:\n${JSON.stringify(teams)}`
+    : "Strategic Context: No specific team units are defined yet. Please allocate tasks based on individual employee skills and the project description.";
+
+  const prompt = `
+You are a Strategic Operations Manager. Your objective is to decompose a complex project into a detailed OPERATIONAL ROADMAP.
+
+Project: ${title}
+Background: ${description}
+Target Deadline: ${projectDeadline || "Standard Agile Sprint (2 weeks)"}
+
+Personnel Fleet:
+${employeeBioList}
+
+${teamContext}
+
+TASK:
+Generate a detailed operational breakdown for the project.
+
+MANDATORY UTILIZATION:
+1. You MUST allocate specific sub-tasks to EVERY employee listed in the "Personnel Fleet" above. 
+2. No employee should be left without an allotment. Every single ID provided must appear in the final JSON array.
+3. If an employee's fit is less obvious, assign them generic project support, documentation, or quality assurance tasks relevant to the project context.
+
+Sub-task Requirements:
+1. Generate 3-5 sub-tasks per operative.
+2. Ensure tasks are contiguous and logically ordered.
+3. Accompanied by a strategic deadline (ISO format).
+4. Assigned a priority: "high", "medium", "low".
+
+Respond ONLY with this exact JSON format:
+{
+  "allotment": [
+    {
+      "employeeId": "...",
+      "rationale": "Strategic reason for this assignment",
+      "subTasks": [
+        {
+          "title": "Sub-task Objective",
+          "description": "Granular instructions",
+          "deadline": "YYYY-MM-DD",
+          "priority": "high"
+        }
+      ]
+    }
+  ]
+}
+`;
+
+  const result = await callGrok(prompt);
+  try {
+    const parsed = JSON.parse(result);
+    if (!parsed.allotment || !Array.isArray(parsed.allotment)) {
+      throw new Error("Invalid AI response structure: 'allotment' array missing.");
+    }
+    return parsed.allotment;
+  } catch (err) {
+    console.error("CRITICAL: Grok Task Allocation Parsing Failed.");
+    console.error("Raw Response:", result);
+    throw new Error(`AI generated an invalid roadmap format: ${err.message}`);
+  }
 };
 
 // ─── GENERATE FEEDBACK ────────────────────────────────────────
@@ -340,4 +417,5 @@ module.exports = {
   generateFeedback,
   formTeams,
   generateEmailEnhanced,
+  allocateStructuredTasks,
 };

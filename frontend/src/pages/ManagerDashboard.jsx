@@ -12,38 +12,19 @@ import {
   uploadTranscript, 
   aiFormTeams, 
   fetchEmployees, 
-  aiManagerChat 
+  aiManagerChat,
+  aiAllocateTasks,
+  commitTasks
 } from "../api/projects";
 import NotificationCenter from "../components/NotificationCenter";
 import AnalyticsView from "../components/AnalyticsView";
 import ReviewWorkView from "../components/ReviewWorkView";
 import EmailAutomationView from "../components/EmailAutomationView";
+import HumanCapitalView from "../components/HumanCapitalView";
+import Icon from "../components/Icon";
+import VoiceAssistant from "../components/VoiceAssistant";
 
-// Professional Line Icons (SVG Paths)
-const Icon = ({ name, size = 18, color = "currentColor", style }) => {
-  const paths = {
-    dashboard: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10",
-    analytics: "M18 20V10 M12 20V4 M6 20V14",
-    plus: "M12 5v14 M5 12h14",
-    zap: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
-    review: "M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11",
-    users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
-    logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9",
-    edit: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
-    chevronLeft: "M15 18l-6-6 6-6",
-    bell: "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0"
-  };
-
-  return (
-    <svg 
-      width={size} height={size} viewBox="0 0 24 24" fill="none" 
-      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
-      style={{ verticalAlign: "middle", ...style }}
-    >
-      <path d={paths[name] || ""} />
-    </svg>
-  );
-};
+// Icon component moved to shared components
 
 export default function ManagerDashboard() {
   const { dbUser, logout } = useAuth();
@@ -98,12 +79,7 @@ export default function ManagerDashboard() {
   const [transcriptUploading, setTranscriptUploading] = useState(false);
   const [transcriptNotice, setTranscriptNotice] = useState("");
 
-  // AI chat (floating)
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
-  const chatScrollRef = useRef(null);
+  // Voice AI Assistant state and context managed in VoiceAssistant component
 
   // AI Crew Selection
   const [crewData, setCrewData] = useState(null); 
@@ -123,11 +99,16 @@ export default function ManagerDashboard() {
   const [showCrewSuggestions, setShowCrewSuggestions] = useState(false);
   const [targetTeam, setTargetTeam] = useState("");
   const [targetMid, setTargetMid] = useState(null);
+  const [activeTab, setActiveTab] = useState("personnel"); // 'personnel' or 'roadmap'
   const [nameSuggestions, setNameSuggestions] = useState([]);
 
   const [employees, setEmployees] = useState([]);
   const [employeeFilterStatus, setEmployeeFilterStatus] = useState("all");
   const [employeeFilterDept, setEmployeeFilterDept] = useState("all");
+
+  const [taskAllotment, setTaskAllotment] = useState([]);
+  const [tasksCommitted, setTasksCommitted] = useState(false);
+  const [taskEditIdx, setTaskEditIdx] = useState(null); // {empIdx, subIdx}
 
   useEffect(() => {
     loadProjects();
@@ -194,6 +175,15 @@ export default function ManagerDashboard() {
       
       const projTasks = await fetchTasksByProject(id);
       setTasks(projTasks);
+      setTaskAllotment(data.taskAllotment || []);
+      setTasksCommitted(data.tasksCommitted || false);
+
+      // Auto-select tab based on progress
+      if ((data.taskAllotment && data.taskAllotment.length > 0) || data.tasksCommitted) {
+        setActiveTab("roadmap");
+      } else {
+        setActiveTab("personnel");
+      }
     } catch (err) {
       setError("Failed to load project details.");
     } finally {
@@ -248,11 +238,16 @@ export default function ManagerDashboard() {
       // Auto-navigate to project detail where AI results will appear
       if (data.project && data.project._id) {
         openProject(data.project._id);
+        
+        // Fix: backend returns { project: { crewData: ... } }
+        if (data.project.crewData) {
+          setCrewData(data.project.crewData.teams || null);
+          setCrewRationale(data.project.crewData.rationale || "");
+          setShowCrewSuggestions(true);
+        }
       } else {
         fetchProjects();
       }
-      setCrewData(data.crewData?.teams || null);
-      setCrewRationale(data.crewData?.rationale || "");
       setTasks([]);
       setForm({ title: "", description: "", requiredSkills: "", deadline: "", transcript: null });
       await loadProjects();
@@ -265,19 +260,42 @@ export default function ManagerDashboard() {
     }
   };
 
-  const handleGenerateWorkflow = async () => {
+  const handleAiAllocateTasks = async () => {
     if (!selectedProject?._id) return;
+    
+    // GUARD: Ensure personnel are committed first
+    if (!selectedProject.assignedEmployees || selectedProject.assignedEmployees.length === 0) {
+      setError("Strategic Error: No personnel assigned. You must commit a project crew before optimizing tasks.");
+      return;
+    }
+
     setAiLoading("workflow");
     try {
-      const result = await aiGenerateWorkflow(selectedProject._id);
-      setSuccess(`Workflow optimized: ${result.aiSummary}`);
-      const projectTasks = await fetchTasksByProject(selectedProject._id);
-      setTasks(projectTasks);
-      setView("tasks");
+      const allotment = await aiAllocateTasks(selectedProject._id);
+      setTaskAllotment(allotment);
+      setTasksCommitted(false);
+      setSuccess("Operational roadmap generated with detailed sub-tasks.");
+      setActiveTab("roadmap"); // Pivot to roadmap view
     } catch (err) {
-      setError("Workflow optimization failed.");
+      const msg = err.response?.data?.message || err.message || "AI task allocation failed.";
+      setError(msg);
     } finally {
       setAiLoading("");
+    }
+  };
+
+  const handleCommitTasks = async () => {
+    if (!selectedProject?._id) return;
+    setLoading(true);
+    try {
+      const updatedProj = await commitTasks(selectedProject._id, taskAllotment);
+      setTasksCommitted(true);
+      setSelectedProject(updatedProj);
+      setSuccess("Strategic roadmap committed and frozen. Dispatch authorized.");
+    } catch (err) {
+      setError("Failed to commit and lock tasks.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -319,8 +337,8 @@ export default function ManagerDashboard() {
 
   const handleSendProjectEmails = async () => {
     if (!selectedProject?._id) return;
-    if (!selectedProject.assignedEmployees || selectedProject.assignedEmployees.length === 0) {
-      setError("No employees committed. Synthesis must be finalized before dispatch.");
+    if (!tasksCommitted) {
+      setError("Operational roadmap not committed. Please optimize and freeze task structures first.");
       return;
     }
     setEmailSending(true);
@@ -460,22 +478,6 @@ export default function ManagerDashboard() {
     if (name) setCrewData(prev => ({ ...(prev || {}), [name]: [] }));
   };
 
-  const handleChatSend = async () => {
-    const q = chatInput.trim();
-    if (!q || chatLoading) return;
-    setChatInput("");
-    setChatMessages(prev => [...prev, { role: "user", text: q }]);
-    setChatLoading(true);
-    try {
-      const reply = await aiManagerChat(q, selectedProject?._id);
-      setChatMessages(prev => [...prev, { role: "assistant", text: String(reply) }]);
-    } catch {
-      setChatMessages(prev => [...prev, { role: "assistant", text: "Communication offline." }]);
-    } finally {
-      setChatLoading(false);
-    }
-  };
-
   const priorityColor = (p) => {
     const map = { high: "#f43f5e", medium: "#f59e0b", low: "#10b981" };
     return map[p] || "#64748b";
@@ -570,6 +572,20 @@ export default function ManagerDashboard() {
               <div style={styles.field}><label style={styles.label}>Description</label><textarea style={{...styles.input, height: "100px"}} required value={form.description} onChange={e => setForm({...form, description: e.target.value})} /></div>
               <div style={styles.field}><label style={styles.label}>Competencies</label><input style={styles.input} value={form.requiredSkills} onChange={e => setForm({...form, requiredSkills: e.target.value})} /></div>
               <div style={styles.field}><label style={styles.label}>Deadline</label><input type="date" style={styles.input} value={form.deadline} onChange={e => setForm({...form, deadline: e.target.value})} /></div>
+              
+              <div style={styles.field}>
+                <label style={styles.label}>Project Transcript (Optional Context)</label>
+                <div style={{ ...styles.input, display: "flex", alignItems: "center", gap: "10px", background: "#f8fafc" }}>
+                  <Icon name="file" size={16} color={UI.textMuted} />
+                  <input 
+                    type="file" 
+                    onChange={e => setForm({...form, transcript: e.target.files[0]})} 
+                    style={{ fontSize: "13px", color: UI.textMuted }}
+                  />
+                </div>
+                <p style={{ fontSize: "11px", color: UI.textMuted, marginTop: "4px" }}>AI will analyze this transcript to generate more precise personnel and task recommendations.</p>
+              </div>
+
               <button type="submit" style={styles.primaryBtn} disabled={loading}>{loading ? "Initializing..." : "Begin Synthesis"}</button>
             </form>
           </div>
@@ -587,58 +603,130 @@ export default function ManagerDashboard() {
                 <button style={styles.ghostBtnRefined} onClick={handleSendProjectEmails} disabled={emailSending}>
                   {emailSending ? "Sending..." : "Dispatch Briefs"}
                 </button>
-                <button style={styles.primaryBtnRefined} onClick={handleGenerateWorkflow}><Icon name="zap" size={16} color="white" /> Optimize</button>
+                <button style={styles.primaryBtnRefined} onClick={handleAiAllocateTasks} disabled={aiLoading === "workflow"}>
+                  <Icon name="zap" size={16} color="white" /> {aiLoading === "workflow" ? "Allocating..." : "Optimize Tasks"}
+                </button>
               </div>
             </div>
             <div style={styles.detailMainLayout}>
               <div style={styles.cardRefined}>
-                <h3 style={styles.cardHeaderSmall}>Strategic Context</h3>
-                <p style={styles.cardBodyText}>{selectedProject.description}</p>
-                {showCrewSuggestions && crewData ? (
-                  <div style={{ marginTop: "40px" }}>
+                <div style={styles.tabSwitcher}>
+                  <button 
+                    style={{ ...styles.tabBtn, ...(activeTab === 'personnel' ? styles.tabBtnActive : {}) }} 
+                    onClick={() => setActiveTab('personnel')}
+                  >
+                    Personnel Framework
+                    {activeTab === 'personnel' && <div style={styles.tabIndicator} />}
+                  </button>
+                  <button 
+                    style={{ ...styles.tabBtn, ...(activeTab === 'roadmap' ? styles.tabBtnActive : {}) }} 
+                    onClick={() => setActiveTab('roadmap')}
+                    disabled={taskAllotment.length === 0 && !tasksCommitted}
+                  >
+                    Operational Roadmap
+                    {activeTab === 'roadmap' && <div style={styles.tabIndicator} />}
+                  </button>
+                </div>
+
+                <div style={{ marginBottom: "32px" }}>
+                   <h3 style={styles.cardHeaderSmall}>Strategic Context</h3>
+                   <p style={styles.cardBodyText}>{selectedProject.description}</p>
+                </div>
+                
+                {activeTab === 'personnel' && (
+                  <div>
                     <div style={styles.aiPanelHeader}>
-                      <h3 style={styles.aiPanelTitle}><Icon name="zap" size={18} color={UI.primary} /> AI Recommendation</h3>
+                      <h3 style={styles.aiPanelTitle}>
+                        <Icon name="zap" size={18} color={UI.primary} /> AI Recommendation
+                      </h3>
                       <button style={styles.aiTertiaryBtn} onClick={addNewTeam}>+ Add Unit</button>
                     </div>
-                    <div style={styles.crewUnitsList}>
-                      {Object.entries(crewData).map(([team, members]) => (
-                        <div key={team} style={styles.crewUnitCard}>
-                          <div style={styles.unitHeader}>
-                            <span style={styles.unitNameText}>{team}</span>
-                            <button style={styles.unitDropBtn} onClick={() => dropWholeTeam(team)}>Drop Component</button>
-                          </div>
-                          <div style={styles.unitMembersGrid}>
-                            {members.map(m => (
-                              <div key={`${team}-${m._id || m.id}`} style={styles.memberPod}>
-                                <div style={{ flex: 1 }}>
-                                  <div style={styles.memberNamePod}>{m.name || m.email}</div>
-                                  <div style={styles.memberSubPod}>{m.department || (m.skills && m.skills[0]) || "Specialist"}</div>
-                                </div>
-                                <div style={{ display: "flex", gap: "4px" }}>
-                                  <button style={styles.podActionBtn} onClick={() => openSearch(team, m._id || m.id)}>Swap</button>
-                                  <button style={{...styles.podActionBtn, color: UI.danger}} onClick={() => dropFromTeam(team, m._id || m.id)}>Drop</button>
-                                </div>
+                    
+                    {crewData ? (
+                      <div style={styles.crewUnitsList}>
+                        {Object.entries(crewData).map(([team, members]) => (
+                          <div key={team} style={styles.crewUnitCard}>
+                            <div style={styles.unitHeader}>
+                              <span style={styles.unitNameText}>{team}</span>
+                              <button style={styles.unitDropBtn} onClick={() => dropWholeTeam(team)}>Drop</button>
+                            </div>
+                            <div style={styles.unitMembersGrid}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                                {members.map(m => (
+                                  <div key={`${team}-${m._id || m.id}`} style={styles.memberPod}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={styles.memberNamePod}>{m.name || m.email}</span>
+                                      <button style={styles.podActionBtn} onClick={() => openSearch(team, m._id || m.id)}>Swap</button>
+                                    </div>
+                                  </div>
+                                ))}
+                                <button style={styles.podActionBtn} onClick={() => openSearch(team)}>+</button>
                               </div>
-                            ))}
-                            <div style={styles.addPodBtn} onClick={() => openSearch(team)}>+ Add Resource</div>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: "32px", display: "flex", gap: "16px" }}>
-                       <button style={styles.confirmBtn} onClick={handleSaveCrew}>Commit Personnel Structure</button>
-                    </div>
+                        ))}
+                        <button style={styles.confirmBtn} onClick={handleSaveCrew}>Commit Personnel</button>
+                      </div>
+                    ) : (
+                      <div style={styles.synthesisLanding}>
+                        <p style={{ color: UI.textMuted, fontSize: "14px", marginBottom: "20px" }}>No personnel recommendations yet.</p>
+                        <button style={styles.primaryBtnRefined} onClick={handleAiSelectPersonnel}>
+                          {aiLoading === "crew" ? "Generating..." : "Synthesize Crew"}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div style={styles.synthesisLanding}>
-                    <p style={{ color: UI.textMuted, fontSize: "14px", marginBottom: "20px" }}>No operational units have been assigned to this initiative yet.</p>
-                    <button 
-                      style={styles.primaryBtnRefined} 
-                      onClick={handleAiSelectPersonnel}
-                      disabled={aiLoading === "crew"}
-                    >
-                      {aiLoading === "crew" ? "Synthesizing..." : "Initialize Synthesis Personnel"}
-                    </button>
+                )}
+
+                {activeTab === 'roadmap' && (
+                  <div>
+                    <div style={styles.aiPanelHeader}>
+                        <h3 style={styles.aiPanelTitle}>
+                          <Icon name="clipboard" size={18} color={UI.primary} /> Operational Roadmap
+                        </h3>
+                        {tasksCommitted ? (
+                           <span style={{ fontSize: "12px", color: UI.success, fontWeight: "700" }}>✓ COMMITTED & FROZEN</span>
+                        ) : taskAllotment.length > 0 && (
+                           <button style={styles.confirmBtn} onClick={handleCommitTasks}>Freeze & Commit Workload</button>
+                        )}
+                    </div>
+
+                    {taskAllotment.length > 0 ? (
+                       <div style={styles.taskAllotmentList}>
+                          {taskAllotment.map((alloc, empIdx) => (
+                             <div key={alloc.employeeId} style={styles.allocCard}>
+                                <div style={styles.allocHeader}>
+                                   <span style={styles.allocName}>{selectedProject.assignedEmployees?.find(e => e._id === alloc.employeeId)?.name || "Operative"}</span>
+                                   <span style={styles.allocRationale}>{alloc.rationale}</span>
+                                </div>
+                                <div style={styles.subTaskList}>
+                                   {alloc.subTasks.map((st, subIdx) => (
+                                      <div key={subIdx} style={styles.subTaskItem}>
+                                         <div style={styles.stCircle}>{subIdx + 1}</div>
+                                         <div style={{ flex: 1 }}>
+                                            <div style={styles.stTitleRow}>
+                                               <span style={styles.stTitle}>{st.title}</span>
+                                               <span style={{...styles.stPriority, background: st.priority === "high" ? "#fee2e2" : "#fef9c3", color: st.priority === "high" ? "#ef4444" : "#a16207" }}>
+                                                  {st.priority}
+                                               </span>
+                                            </div>
+                                            <p style={styles.stDesc}>{st.description}</p>
+                                            <div style={styles.stDeadline}>Deadline: {new Date(st.deadline).toLocaleDateString()}</div>
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    ) : (
+                       <div style={styles.synthesisLanding}>
+                          <p style={{ color: UI.textMuted, fontSize: "14px", marginBottom: "20px" }}>Personnel must be optimized first.</p>
+                          <button style={styles.primaryBtnRefined} onClick={handleAiAllocateTasks}>
+                            Optimize Task Flow
+                          </button>
+                       </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -676,33 +764,11 @@ export default function ManagerDashboard() {
         {view === "review" && <ReviewWorkView initialReportId={selectedReportId} />}
         {view === "email" && <EmailAutomationView />}
         {view === "employee_details" && (
-           <div style={styles.projectGrid}>
-             {employees.filter(e => employeeFilterStatus === "all" || e.activeStatus === employeeFilterStatus).map((emp, idx) => (
-                <div key={emp._id || idx} style={styles.employeeCardPremium}><h3 style={styles.empNameText}>{emp.name}</h3><p>{emp.department}</p></div>
-             ))}
-           </div>
+           <HumanCapitalView employees={employees} projects={projects} />
         )}
       </main>
 
-      {/* AI Chat Fabric */}
-      <div style={styles.chatDock}>
-        {chatOpen && (
-          <div style={styles.chatPanel}>
-            <div style={styles.chatPanelHeader}>Intelligence Liaison</div>
-            <div ref={chatScrollRef} style={styles.chatMessages}>
-              {chatMessages.map((m, i) => (
-                <div key={i} style={m.role === "user" ? styles.chatMsgUser : styles.chatMsgAi}>{m.text}</div>
-              ))}
-            </div>
-            <div style={styles.chatInputRow}>
-              <input style={styles.chatInput} value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleChatSend()} />
-            </div>
-          </div>
-        )}
-        <button style={styles.chatFab} onClick={() => setChatOpen(!chatOpen)}>
-          <Icon name="zap" size={24} color="white" />
-        </button>
-      </div>
+      <VoiceAssistant selectedProjectId={selectedProject?._id} />
 
       {/* Modal - Unified Edit */}
       {editModalOpen && (
@@ -713,6 +779,66 @@ export default function ManagerDashboard() {
               <input style={styles.input} value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} />
               <button type="submit" style={styles.primaryBtnRefined}>Confirm Updates</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Employee Search / Swap */}
+      {showSearch && (
+        <div style={styles.modalOverlay} onClick={() => setShowSearch(false)}>
+          <div style={{ ...styles.cardRefined, width: "600px", maxWidth: "90vw", maxHeight: "85vh", overflow: "hidden", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
+            <div style={{ marginBottom: "24px" }}>
+              <h2 style={{ fontSize: "24px", fontWeight: "800", marginBottom: "8px" }}>Assign Resource</h2>
+              <p style={{ fontSize: "14px", color: UI.textMuted }}>Target: {targetTeam}</p>
+            </div>
+            
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "20px" }}>
+              <input 
+                style={{ ...styles.input, flex: 1, minWidth: "200px" }} 
+                placeholder="Search by name..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <span style={{ fontSize: "12px", fontWeight: "700" }}>Min. Exp:</span>
+                <input 
+                  type="number" 
+                  style={{ ...styles.input, width: "60px" }} 
+                  value={filterExp}
+                  onChange={e => setFilterExp(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", paddingRight: "8px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {searchResults.filter(e => {
+                  const matchesName = e.name.toLowerCase().includes(searchQuery.toLowerCase());
+                  const matchesExp = (Number(e.experience) || 0) >= Number(filterExp);
+                  return matchesName && matchesExp;
+                }).map(emp => (
+                  <div 
+                    key={emp._id} 
+                    style={{ ...styles.memberPod, cursor: "pointer", border: `1px solid ${UI.border}` }}
+                    onClick={() => selectEmployeeForCrew(emp._id)}
+                  >
+                    <div style={{ ...styles.miniEmpAvatar, marginRight: "12px" }}>{emp.name?.charAt(0)}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "14px", fontWeight: "700" }}>{emp.name}</div>
+                      <div style={{ fontSize: "11px", color: UI.textMuted }}>{emp.department} • {emp.experience}yrs Exp</div>
+                    </div>
+                    <Icon name="plus" size={16} color={UI.primary} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button 
+              style={{ ...styles.ghostBtnRefined, marginTop: "20px", width: "100%" }} 
+              onClick={() => setShowSearch(false)}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -778,8 +904,13 @@ const styles = {
   ghostBtnRefined: { background: "#fff", border: `1px solid ${UI.border}`, padding: "10px 18px", borderRadius: "10px", fontWeight: "700", cursor: "pointer" },
   primaryBtnRefined: { background: UI.primary, color: "white", border: "none", padding: "10px 18px", borderRadius: "10px", fontWeight: "700", cursor: "pointer" },
   
-  detailMainLayout: { display: "grid", gridTemplateColumns: "1fr 450px", gap: "40px" },
+  detailMainLayout: { display: "grid", gridTemplateColumns: "1fr 400px", gap: "40px" },
   cardRefined: { background: UI.card, padding: "32px", borderRadius: "28px", border: `1px solid ${UI.border}` },
+  
+  tabSwitcher: { display: "flex", gap: "32px", marginBottom: "32px", borderBottom: `1px solid ${UI.border}`, paddingBottom: "4px" },
+  tabBtn: { background: "transparent", border: "none", padding: "12px 4px", fontSize: "14px", fontWeight: "700", color: UI.textMuted, cursor: "pointer", position: "relative", transition: "all 0.2s" },
+  tabBtnActive: { color: UI.primary },
+  tabIndicator: { position: "absolute", bottom: "-5px", left: 0, right: 0, height: "3px", background: UI.primary, borderRadius: "2px" },
   synthesisLanding: { 
     marginTop: "40px", 
     padding: "32px", 
@@ -892,5 +1023,19 @@ const styles = {
   chatMsgUser: { alignSelf: "flex-end", background: UI.primary, color: "#fff", padding: "10px 14px", borderRadius: "14px 14px 0 14px", fontSize: "13px" },
   chatMsgAi: { alignSelf: "flex-start", background: "#f1f5f9", color: "#333", padding: "10px 14px", borderRadius: "14px 14px 14px 0", fontSize: "13px" },
   chatInputRow: { padding: "16px", borderTop: `1px solid ${UI.border}` },
-  chatInput: { width: "100%", padding: "10px", borderRadius: "10px", background: "#f8fafc", border: `1px solid ${UI.border}`, outline: "none" }
+  chatInput: { width: "100%", padding: "10px", borderRadius: "10px", background: "#f8fafc", border: `1px solid ${UI.border}`, outline: "none" },
+  
+  taskAllotmentList: { display: "flex", flexDirection: "column", gap: "24px" },
+  allocCard: { background: "#fff", border: `1px solid ${UI.border}`, borderRadius: "20px", overflow: "hidden" },
+  allocHeader: { padding: "16px 24px", background: "#f8fafc", borderBottom: `1px solid ${UI.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" },
+  allocName: { fontSize: "16px", fontWeight: "800", color: UI.text },
+  allocRationale: { fontSize: "12px", color: UI.textMuted, fontStyle: "italic" },
+  subTaskList: { padding: "24px", display: "flex", flexDirection: "column", gap: "20px" },
+  subTaskItem: { display: "flex", gap: "16px" },
+  stCircle: { width: "24px", height: "24px", borderRadius: "50%", background: UI.primary, color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "800", flexShrink: 0 },
+  stTitleRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" },
+  stTitle: { fontSize: "15px", fontWeight: "700", color: UI.text },
+  stPriority: { padding: "2px 8px", borderRadius: "6px", fontSize: "10px", fontWeight: "800", textTransform: "uppercase" },
+  stDesc: { fontSize: "14px", color: UI.textMuted, lineHeight: "1.5", margin: "4px 0 8px" },
+  stDeadline: { fontSize: "11px", fontWeight: "700", color: UI.primary, textTransform: "uppercase", letterSpacing: "0.5px" },
 };

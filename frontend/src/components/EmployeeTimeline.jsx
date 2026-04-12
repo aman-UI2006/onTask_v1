@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 
 export default function EmployeeTimeline({ tasks, accentColor = "var(--primary)" }) {
   const sortedTasks = useMemo(() => {
+    // Sort chronologically (oldest at top, newest at bottom)
     return [...tasks].sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt));
   }, [tasks]);
 
