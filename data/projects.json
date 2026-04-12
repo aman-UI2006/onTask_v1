@@ -1,0 +1,20 @@
+[
+    {
+        "id": 1,
+        "name": "AI Dashboard Upgrade",
+        "description": "Migrating basic charts to Plotly and improving UX.",
+        "start_date": "2024-04-01",
+        "end_date": "2024-05-15",
+        "status": "In-Progress",
+        "created_at": "2026-04-07T19:34:49.885114"
+    },
+    {
+        "id": 2,
+        "name": "Customer Support Bot",
+        "description": "LLM-driven automation for support tickets.",
+        "start_date": "2024-04-10",
+        "end_date": "2024-06-01",
+        "status": "Planned",
+        "created_at": "2026-04-07T19:34:49.899513"
+    }
+]

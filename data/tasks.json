@@ -1,0 +1,38 @@
+[
+    {
+        "id": 1,
+        "project_id": 1,
+        "assigned_to": 1,
+        "name": "Setup Plotly logic",
+        "deadline": "2024-04-20",
+        "status": "In-Progress",
+        "progress": 40
+    },
+    {
+        "id": 2,
+        "project_id": 1,
+        "assigned_to": 2,
+        "name": "Design sidebar UI",
+        "deadline": "2024-04-22",
+        "status": "Completed",
+        "progress": 100
+    },
+    {
+        "id": 3,
+        "project_id": 2,
+        "assigned_to": 3,
+        "name": "Initialize VectorDB",
+        "deadline": "2024-05-01",
+        "status": "Pending",
+        "progress": 0
+    },
+    {
+        "id": 4,
+        "project_id": 2,
+        "assigned_to": 1,
+        "name": "Test Groq Integration",
+        "deadline": "2024-05-05",
+        "status": "Pending",
+        "progress": 0
+    }
+]

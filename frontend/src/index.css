@@ -1,0 +1,198 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #f8fafc; /* Subtle off-white for contrast */
+}
+
+/* ============================================================ 
+   LOGIN PAGE — Illustration + Slide-in Animation Layout
+   Ported from frontend/src/index.css
+   ============================================================ */
+
+/* Slide-in animations for the two panels */
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* SVG glow pulse on the illustration */
+@keyframes svgGlow {
+  0%, 100% {
+    filter: drop-shadow(0 20px 40px rgba(99, 102, 241, 0.05));
+  }
+  50% {
+    filter: drop-shadow(0 25px 50px rgba(99, 102, 241, 0.15));
+  }
+}
+
+/* Morphing blob background shape */
+@keyframes morphShape {
+  0%, 100% {
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  }
+  50% {
+    border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+  }
+}
+
+/* Gradient animation */
+@keyframes gradientRotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Utility animation classes */
+.slide-in-left {
+  animation: slideInLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide-in-right {
+  animation: slideInRight 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+/* Full-viewport login page — white background */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  padding: 40px;
+  position: relative;
+}
+
+/* Two-panel frame holding illustration + form side by side */
+.login-frame {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  max-width: 1240px;
+  min-height: 720px;
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 32px;
+  box-shadow: 
+    0 10px 15px -3px rgba(0, 0, 0, 0.05),
+    0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Left panel — SVG illustration */
+.login-illustration {
+  flex: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: #ffffff;
+  overflow: hidden;
+  border-right: 1px solid #f1f5f9;
+}
+
+/* Right panel — form container */
+.login-form-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 40px;
+  background: #fcfdfe;
+  position: relative;
+}
+
+/* Card wrapping the form itself */
+.login-form-card {
+  background: #ffffff;
+  border-radius: 28px;
+  padding: 40px;
+  box-shadow: 
+    0 20px 25px -5px rgba(0, 0, 0, 0.05),
+    0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  max-width: 440px;
+  position: relative;
+}
+
+.login-form-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.12),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+/* Header section inside card */
+.login-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.login-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary, #64748b);
+  line-height: 1.4;
+}
+
+/* Footer inside card */
+.login-footer {
+  text-align: center;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color, #e2e8f0);
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
+}
+
+/* Mobile: stack panels vertically */
+@media (max-width: 768px) {
+  .login-page {
+    padding: 20px;
+  }
+
+  .login-frame {
+    flex-direction: column;
+    max-width: 500px;
+    min-height: auto;
+  }
+
+  .login-illustration {
+    min-height: 350px;
+  }
+
+  .login-form-container {
+    padding: 40px 30px;
+  }
+}

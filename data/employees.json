@@ -1,0 +1,57 @@
+[
+    {
+        "id": 1,
+        "name": "Ketan",
+        "email": "kabadeketan2@gmail.com",
+        "skills": [
+            "Python",
+            "Streamlit",
+            "Plotly"
+        ],
+        "experience": 5,
+        "gender": "Male",
+        "availability": true,
+        "projects_worked": 0
+    },
+    {
+        "id": 2,
+        "name": "Alice",
+        "email": "alice@example.com",
+        "skills": [
+            "React",
+            "CSS",
+            "UI/UX"
+        ],
+        "experience": 3,
+        "gender": "Female",
+        "availability": true,
+        "projects_worked": 0
+    },
+    {
+        "id": 3,
+        "name": "Bob",
+        "email": "bob@example.com",
+        "skills": [
+            "Backend",
+            "FastAPI",
+            "PostgreSQL"
+        ],
+        "experience": 7,
+        "gender": "Male",
+        "availability": true,
+        "projects_worked": 0
+    },
+    {
+        "id": 4,
+        "name": "Diana",
+        "email": "diana@example.com",
+        "skills": [
+            "Documentation",
+            "Communication"
+        ],
+        "experience": 2,
+        "gender": "Female",
+        "availability": true,
+        "projects_worked": 0
+    }
+]
