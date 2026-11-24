@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+!.env.production.example
+*.pem
+*.key
+service-account*.json
+firebase-adminsdk*.json
+
+# Runtime data and logs
+*.log
+logs/
+email_logs.csv
+feedback_logs.csv
+uploads/
+data/runtime/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
